@@ -59,7 +59,7 @@
                     <span class="w-2 h-2 rounded-full bg-yellow-500 mr-2"></span> Demo
                 </span>
                 
-                <!-- 🔽 정렬 모달을 여는 새로운 버튼 🔽 -->
+                <!-- 정렬 설정 버튼 -->
                 <button onclick="toggleSortModal()" class="text-gray-400 hover:text-white p-2 transition-colors rounded-full hover:bg-gray-800" title="정렬 설정">
                     <i class="fa-solid fa-arrow-down-wide-short text-lg"></i>
                 </button>
@@ -134,7 +134,7 @@
         </div>
     </div>
 
-    <!-- 🔽 추가된 정렬 설정 팝업(Modal) 🔽 -->
+    <!-- 정렬 설정 팝업(Modal) -->
     <div id="sort-modal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-0 transition-opacity duration-300 p-4">
         <div class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="sort-content">
             <div class="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
@@ -228,7 +228,6 @@
                     });
                     gapiInited = true;
 
-                    // 앱 재시작 시 localStorage에 저장된 토큰이 있는지 확인하여 자동 연결
                     const savedToken = localStorage.getItem('gapi_token');
                     if (savedToken) {
                         gapi.client.setToken(JSON.parse(savedToken));
@@ -262,8 +261,6 @@
         function handleAuthClick() {
             tokenClient.callback = async (resp) => {
                 if (resp.error) throw (resp);
-                
-                // 로그인 성공 시 발급된 임시 출입증을 localStorage에 백업 (재접속/새로고침 유지용)
                 localStorage.setItem('gapi_token', JSON.stringify(gapi.client.getToken()));
 
                 authBtn.style.display = 'none';
@@ -282,6 +279,7 @@
             if (token) {
                 google.accounts.oauth2.revoke(token.access_token);
                 gapi.client.setToken('');
+                localStorage.removeItem('gapi_token');
                 isConnected = false;
                 authBtn.style.display = 'inline-flex';
                 logoutBtn.style.display = 'none';
@@ -292,36 +290,44 @@
             }
         }
 
-        // 🔽 [수정됨] 범위를 인식하는 새로운 정렬 확인 로직 🔽
         function getSortPreference() {
             try {
                 const currentFolderId = pathHistory[pathHistory.length - 1].id;
                 const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
                 
-                // 1. 현재 폴더에 개별 설정(this_only 또는 this_and_sub)이 있는지 최우선 확인
                 if (prefs[currentFolderId]) return prefs[currentFolderId].value;
                 
-                // 2. 상위 폴더 중에 '하위 폴더까지 적용(this_and_sub)' 설정이 있는지 거슬러 올라가며 확인
                 for (let i = pathHistory.length - 2; i >= 0; i--) {
                     const fid = pathHistory[i].id;
                     if (prefs[fid] && prefs[fid].scope === 'this_and_sub') return prefs[fid].value;
                 }
                 
-                // 3. 개별 지정된 것이 전혀 없다면 전체 기본값(global) 반환
                 const globalSort = localStorage.getItem('global_sort');
                 if (globalSort) return globalSort;
-
             } catch (e) { console.error(e); }
-            return 'folder, createdTime desc'; // 최초 기본값(최신순)
+            return 'folder, createdTime desc'; 
         }
 
-        // 🔽 [추가됨] 정렬 모달창 열기 및 닫기 🔽
+        // 🔽 즐겨찾기(고정) 토글 및 상태 관리 함수 🔽
+        function togglePin(event, id) {
+            event.stopPropagation(); // 카드 클릭(폴더 열기/라이트박스) 방지
+            try {
+                let pinned = JSON.parse(localStorage.getItem('pinned_items') || '[]');
+                if (pinned.includes(id)) {
+                    pinned = pinned.filter(item => item !== id);
+                } else {
+                    pinned.push(id);
+                }
+                localStorage.setItem('pinned_items', JSON.stringify(pinned));
+                loadCurrentFolder(); // 목록 새로고침
+            } catch (e) { console.error(e); }
+        }
+
         const sortModal = document.getElementById('sort-modal');
         const sortContent = document.getElementById('sort-content');
 
         function toggleSortModal() {
             if (sortModal.classList.contains('hidden')) {
-                // 모달을 열 때, 현재 폴더에 적용중인 설정값을 미리 채워줍니다.
                 const currentFolderId = pathHistory[pathHistory.length - 1].id;
                 const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
                 
@@ -344,7 +350,6 @@
             }
         }
 
-        // 🔽 [추가됨] 팝업에서 정렬 방식을 저장하고 화면을 새로고침 🔽
         function applySortModal() {
             const value = document.getElementById('sort-value-input').value;
             const scope = document.getElementById('sort-scope-input').value;
@@ -352,7 +357,6 @@
 
             if (scope === 'global') {
                 localStorage.setItem('global_sort', value);
-                // 현재 폴더의 기존 개별 설정은 삭제 (전체 규칙을 따르게 함)
                 const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
                 delete prefs[currentFolderId];
                 localStorage.setItem('folder_sort_prefs', JSON.stringify(prefs));
@@ -366,7 +370,6 @@
             if (isConnected) loadCurrentFolder(); 
         }
 
-        // 🔽 [추가됨] 현재 폴더의 꼬인 정렬 설정을 초기화 🔽
         function clearCurrentFolderSort() {
             const currentFolderId = pathHistory[pathHistory.length - 1].id;
             const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
@@ -429,7 +432,9 @@
 
         async function fetchDriveItems(folderId, activeSort) {
             try {
-                // 한 번에 1000개까지 가져와서 재정렬 가능하도록 적용
+                let imageSortOrder = activeSort.replace('folder,', '').trim();
+                if (!imageSortOrder) imageSortOrder = 'createdTime desc';
+
                 const response = await gapi.client.drive.files.list({
                     pageSize: 1000,
                     fields: 'files(id, name, mimeType, thumbnailLink)',
@@ -449,7 +454,7 @@
                     };
                 });
 
-                // 숫자 인식 '자연 정렬' 로직
+                // 이름순 정렬 시 숫자 자연 정렬 적용
                 if (activeSort.includes('name')) {
                     const isDesc = activeSort.includes('desc');
                     formattedItems.sort((a, b) => {
@@ -458,19 +463,28 @@
                         return isDesc ? -compareResult : compareResult;
                     });
                 }
+
+                // 🔽 [핵심] 고정(즐겨찾기)된 항목을 무조건 맨 위로 강제 정렬 🔽
+                const pinnedIds = JSON.parse(localStorage.getItem('pinned_items') || '[]');
+                formattedItems.sort((a, b) => {
+                    const aPinned = pinnedIds.includes(a.id);
+                    const bPinned = pinnedIds.includes(b.id);
+                    if (aPinned && !bPinned) return -1; // a가 고정되어 있으면 위로
+                    if (!aPinned && bPinned) return 1;  // b가 고정되어 있으면 위로
+                    return 0; // 둘 다 상태가 같으면 기존 정렬 유지
+                });
                 
-                await renderItems(formattedItems);
+                await renderItems(formattedItems, imageSortOrder);
                 
                 formattedItems.filter(i => i.type === 'folder').forEach(folder => {
-                    fetchFolderCoverAsync(folder.id);
+                    fetchFolderCoverAsync(folder.id, imageSortOrder);
                 });
 
             } catch (err) {
                 console.error(err);
-                // 1시간이 지나 토큰이 만료되어 401 에러가 발생한 경우 자동 로그아웃 처리
                 if (err && err.status === 401) {
                     handleSignoutClick();
-                    alert("인증이 만료되었습니다. 안전을 위해 다시 Connect를 눌러주세요.");
+                    alert("인증이 만료되었습니다. 다시 Connect를 눌러주세요.");
                 } else {
                     alert("Error fetching Drive data.");
                 }
@@ -478,18 +492,14 @@
             }
         }
 
-        async function fetchFolderCoverAsync(folderId, sortOrder = 'createdTime desc') {
+        async function fetchFolderCoverAsync(folderId, imageSortOrder = 'createdTime desc') {
             if(!isConnected) return;
             try {
-                // 🔽 [추가됨] 폴더 최우선 정렬 규칙(folder,)을 제거하고 순수 사진 정렬 기준만 추출
-                let imageSortOrder = sortOrder.replace('folder,', '').trim();
-                if (!imageSortOrder) imageSortOrder = 'createdTime desc';
-
                 const res = await gapi.client.drive.files.list({
                     pageSize: 1,
                     fields: 'files(thumbnailLink)',
                     q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-                    orderBy: imageSortOrder // 🔽 [수정됨] 표지 1장을 가져올 때도 정렬 방식을 강제합니다.
+                    orderBy: imageSortOrder
                 });
                 if (res.result.files && res.result.files.length > 0) {
                     const coverUrl = res.result.files[0].thumbnailLink.replace(/=s\d+$/, '=w500');
@@ -509,13 +519,24 @@
                 return;
             }
             
+            const pinnedIds = JSON.parse(localStorage.getItem('pinned_items') || '[]');
+
             items.forEach(item => {
+                const isPinned = pinnedIds.includes(item.id);
                 const card = document.createElement('div');
                 card.className = 'gallery-item relative rounded-2xl overflow-hidden cursor-pointer group bg-gray-800 border border-gray-700 shadow-md';
                 
+                // 고정(즐겨찾기) 버튼 HTML (우측 상단 별모양)
+                const pinButtonHtml = `
+                    <button onclick="togglePin(event, '${item.id}')" class="absolute top-2 right-2 z-20 p-2 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-sm text-white transition-all ${isPinned ? 'text-yellow-400 opacity-100' : 'opacity-0 group-hover:opacity-100'}">
+                        <i class="fa-${isPinned ? 'solid' : 'regular'} fa-star text-sm drop-shadow"></i>
+                    </button>
+                `;
+
                 if (item.type === 'folder') {
                     const coverUrl = isConnected ? '' : (item.cover || '');
                     card.innerHTML = `
+                        ${pinButtonHtml}
                         <div class="absolute inset-0 bg-gray-700 flex items-center justify-center">
                             <i class="fa-solid fa-folder text-4xl text-gray-500"></i>
                         </div>
@@ -530,7 +551,10 @@
                 } else {
                     const thumbUrl = item.thumbUrl || item.url;
                     const fullUrl = item.fullUrl || item.url;
-                    card.innerHTML = `<img src="${thumbUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" alt="${item.name}">`;
+                    card.innerHTML = `
+                        ${pinButtonHtml}
+                        <img src="${thumbUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" alt="${item.name}">
+                    `;
                     card.onclick = () => openLightbox(fullUrl, item.name);
                 }
                 galleryGrid.appendChild(card);
@@ -613,7 +637,6 @@
             if(e.key === 'Escape' && !lightbox.classList.contains('hidden')) closeLightbox();
         });
 
-        // 스마트폰 앱 설치(PWA) 지원 기능
         function initPWA() {
             const manifest = {
                 name: "Drive Gallery",
@@ -677,4 +700,5 @@
         });
     </script>
 </body>
+</html>
 </html>
