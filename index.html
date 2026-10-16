@@ -18,7 +18,7 @@
         
         .gallery-item {
             transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-            aspect-ratio: 1 / 1; /* Square grid like default gallery apps */
+            aspect-ratio: 1 / 1;
         }
         .gallery-item:hover {
             transform: scale(1.03);
@@ -26,7 +26,7 @@
             z-index: 10;
         }
 
-        /* Standard Grid Layout for Gallery */
+        /* Standard Grid Layout */
         .app-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -55,6 +55,14 @@
             </div>
             
             <div class="flex items-center space-x-2 md:space-x-4">
+                <!-- PC 정렬 드롭다운 메뉴 -->
+                <select id="sortMenu" onchange="applySort(this.value)" class="bg-gray-800 text-white text-sm rounded-lg px-3 py-2 border border-gray-600 outline-none cursor-pointer focus:border-blue-500 transition-colors shadow-sm hidden sm:block">
+                    <option value="folder, createdTime desc">⬇️ 최신순 (기본)</option>
+                    <option value="folder, createdTime">⬆️ 과거순</option>
+                    <option value="folder, name">🔤 이름순(A-Z)</option>
+                    <option value="folder, name desc">🔤 이름 역순(Z-A)</option>
+                </select>
+
                 <span id="status-indicator" class="hidden sm:inline-flex items-center text-sm text-gray-400">
                     <span class="w-2 h-2 rounded-full bg-yellow-500 mr-2"></span> Demo
                 </span>
@@ -73,21 +81,25 @@
         </div>
     </nav>
 
+    <!-- Mobile Sort Menu -->
+    <div class="block sm:hidden px-4 pt-4 flex justify-end">
+        <select id="sortMenuMobile" onchange="applySort(this.value)" class="bg-gray-800 text-white text-sm rounded-lg px-3 py-2 border border-gray-600 outline-none cursor-pointer w-full focus:border-blue-500 transition-colors shadow-sm">
+            <option value="folder, createdTime desc">⬇️ 최신순 (기본)</option>
+            <option value="folder, createdTime">⬆️ 과거순</option>
+            <option value="folder, name">🔤 이름순(A-Z)</option>
+            <option value="folder, name desc">🔤 이름 역순(Z-A)</option>
+        </select>
+    </div>
+
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto p-4 py-6">
-        
-        <!-- Breadcrumb Navigation -->
-        <div id="breadcrumb-container" class="flex items-center space-x-2 text-sm md:text-base text-gray-300 mb-6 overflow-x-auto whitespace-nowrap pb-2 font-medium">
-            <!-- Breadcrumbs injected by JS -->
-        </div>
+        <div id="breadcrumb-container" class="flex items-center space-x-2 text-sm md:text-base text-gray-300 mb-6 overflow-x-auto whitespace-nowrap pb-2 font-medium"></div>
 
-        <!-- Loading State -->
         <div id="loading-spinner" class="hidden flex flex-col items-center justify-center py-20">
             <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
             <p class="text-gray-400 animate-pulse">Loading folders & photos...</p>
         </div>
 
-        <!-- Empty State -->
         <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-center">
             <div class="bg-gray-800 p-6 rounded-full mb-4 shadow-inner">
                 <i class="fa-regular fa-folder-open text-5xl text-gray-500"></i>
@@ -96,13 +108,10 @@
             <p class="text-gray-400 max-w-md">There are no photos or subfolders here.</p>
         </div>
 
-        <!-- Gallery Grid -->
-        <div id="gallery-grid" class="app-grid">
-            <!-- Items (Folders & Images) will be injected here -->
-        </div>
+        <div id="gallery-grid" class="app-grid"></div>
     </main>
 
-    <!-- Lightbox (Image Viewer) Modal -->
+    <!-- Lightbox Modal -->
     <div id="lightbox" class="fixed inset-0 z-50 hidden bg-black/95 flex items-center justify-center opacity-0 transition-opacity duration-300">
         <button onclick="closeLightbox()" class="absolute top-6 right-6 text-white/50 hover:text-white text-4xl p-2 z-50 transition-colors">
             <i class="fa-solid fa-xmark"></i>
@@ -113,7 +122,7 @@
         </div>
     </div>
 
-    <!-- Settings Modal (API Configuration) -->
+    <!-- Settings Modal -->
     <div id="settings-modal" class="fixed inset-0 z-50 hidden bg-black/70 backdrop-blur-sm flex items-center justify-center opacity-0 transition-opacity duration-300 p-4">
         <div class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="settings-content">
             <div class="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
@@ -121,9 +130,7 @@
                 <button onclick="toggleSettingsModal()" class="text-gray-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="p-6 space-y-5">
-                <p class="text-sm text-gray-400">
-                    To view your actual Google Drive photos, please enter your API credentials.
-                </p>
+                <p class="text-sm text-gray-400">To view your actual Google Drive photos, please enter your API credentials.</p>
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-1.5">API Key</label>
                     <input type="text" id="api-key-input" placeholder="AIzaSy..." class="w-full bg-gray-900 border border-gray-600 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
@@ -141,7 +148,6 @@
     </div>
 
     <script>
-        // --- Configuration & State ---
         const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
         
@@ -150,10 +156,8 @@
         let gisInited = false;
         let isConnected = false;
         
-        // Navigation State (Breadcrumbs)
         let pathHistory = [{ id: 'root', name: 'My Drive' }];
         
-        // DOM Elements
         const authBtn = document.getElementById('auth-btn');
         const logoutBtn = document.getElementById('logout-btn');
         const galleryGrid = document.getElementById('gallery-grid');
@@ -162,31 +166,10 @@
         const statusIndicator = document.getElementById('status-indicator');
         const breadcrumbContainer = document.getElementById('breadcrumb-container');
 
-        // --- Demo File System (Hierarchical) ---
         const demoFileSystem = {
-            'root': [
-                { id: 'f_vacation', type: 'folder', name: 'Summer Vacation 2023', cover: 'https://images.unsplash.com/photo-1506905925232-39f1559ad9e1?w=400&q=80' },
-                { id: 'f_wallpapers', type: 'folder', name: 'Wallpapers', cover: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=400&q=80' },
-                { id: 'img_1', type: 'image', name: 'Camera Roll 1', url: 'https://images.unsplash.com/photo-1516109923616-d3ce38be8610?w=800&q=80' }
-            ],
-            'f_vacation': [
-                { id: 'img_v1', type: 'image', name: 'Beach Sunset', url: 'https://images.unsplash.com/photo-1506905925232-39f1559ad9e1?w=800&q=80' },
-                { id: 'img_v2', type: 'image', name: 'Forest Hike', url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80' },
-                { id: 'img_v3', type: 'image', name: 'Ocean Waves', url: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=800&q=80' }
-            ],
-            'f_wallpapers': [
-                { id: 'f_abstract', type: 'folder', name: 'Abstract', cover: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=400&q=80' },
-                { id: 'img_w1', type: 'image', name: 'City Skyline', url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=80' },
-                { id: 'img_w2', type: 'image', name: 'Desert Dunes', url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=800&q=80' },
-                { id: 'img_w3', type: 'image', name: 'Starry Night', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&q=80' }
-            ],
-            'f_abstract': [
-                { id: 'img_a1', type: 'image', name: 'Colors', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=800&q=80' },
-                { id: 'img_a2', type: 'image', name: 'Geometry', url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=800&q=80' }
-            ]
+            'root': [{ id: 'img_1', type: 'image', name: 'Please Connect Drive', url: 'https://images.unsplash.com/photo-1516109923616-d3ce38be8610?w=800&q=80' }]
         };
 
-        // --- STREAMING_CHUNK:App Initialization & Google Auth Logic ---
         function initApp() {
             const apiKey = localStorage.getItem('drive_api_key');
             const clientId = localStorage.getItem('drive_client_id');
@@ -206,7 +189,7 @@
                 statusIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-yellow-500 mr-2"></span> Demo Mode';
                 authBtn.style.display = 'none';
                 logoutBtn.style.display = 'none';
-                loadCurrentFolder(); // Load root of demo
+                loadCurrentFolder();
             }
         }
 
@@ -214,20 +197,32 @@
         function gisLoadPromise() { return new Promise((r) => { if (typeof google !== 'undefined' && google.accounts) r(); else setTimeout(r, 500); }); }
 
         function gapiInit() {
-    gapi.load('client', async () => {
-        try {
-            await gapi.client.init({
-                apiKey: localStorage.getItem('drive_api_key'),
-                discoveryDocs: [DISCOVERY_DOC],
+            gapi.load('client', async () => {
+                try {
+                    await gapi.client.init({
+                        apiKey: localStorage.getItem('drive_api_key'),
+                        discoveryDocs: [DISCOVERY_DOC],
+                    });
+                    gapiInited = true;
+
+                    // 앱 재시작 시 localStorage에 저장된 토큰이 있는지 확인하여 자동 연결
+                    const savedToken = localStorage.getItem('gapi_token');
+                    if (savedToken) {
+                        gapi.client.setToken(JSON.parse(savedToken));
+                        isConnected = true;
+                        authBtn.style.display = 'none';
+                        logoutBtn.style.display = 'inline-flex';
+                        statusIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span> Connected';
+                        loadCurrentFolder(); 
+                    }
+
+                    maybeEnableButtons();
+                } catch (err) { 
+                    console.error("API Init Error:", err);
+                    alert('API Init Error. Check API Key.'); 
+                }
             });
-            gapiInited = true;
-            maybeEnableButtons();
-        } catch (err) { 
-            console.error("API Init Error:", err);
-            alert('API Init Error. Check API Key.'); 
         }
-    });
-}
 
         function gisInit() {
             tokenClient = google.accounts.oauth2.initTokenClient({
@@ -244,11 +239,15 @@
         function handleAuthClick() {
             tokenClient.callback = async (resp) => {
                 if (resp.error) throw (resp);
+                
+                // 로그인 성공 시 발급된 임시 출입증을 localStorage에 백업 (재접속/새로고침 유지용)
+                localStorage.setItem('gapi_token', JSON.stringify(gapi.client.getToken()));
+
                 authBtn.style.display = 'none';
                 logoutBtn.style.display = 'inline-flex';
                 statusIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span> Connected';
                 isConnected = true;
-                pathHistory = [{ id: 'root', name: 'My Drive' }]; // reset path
+                pathHistory = [{ id: 'root', name: 'My Drive' }];
                 loadCurrentFolder();
             };
             if (gapi.client.getToken() === null) tokenClient.requestAccessToken({prompt: 'consent'});
@@ -260,6 +259,10 @@
             if (token) {
                 google.accounts.oauth2.revoke(token.access_token);
                 gapi.client.setToken('');
+                
+                // 수동 로그아웃 시 백업된 토큰도 완전히 삭제
+                localStorage.removeItem('gapi_token');
+
                 isConnected = false;
                 authBtn.style.display = 'inline-flex';
                 logoutBtn.style.display = 'none';
@@ -270,11 +273,26 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Navigation and Fetching Logic ---
-        
-        // Navigate into a folder
+        function getSortPreference() {
+            try {
+                const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
+                for (let i = pathHistory.length - 1; i >= 0; i--) {
+                    const fid = pathHistory[i].id;
+                    if (prefs[fid]) return prefs[fid];
+                }
+            } catch (e) { console.error(e); }
+            return 'folder, createdTime desc'; 
+        }
+
+        function applySort(selectedValue) {
+            const currentFolderId = pathHistory[pathHistory.length - 1].id;
+            const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
+            prefs[currentFolderId] = selectedValue;
+            localStorage.setItem('folder_sort_prefs', JSON.stringify(prefs));
+            if (isConnected) loadCurrentFolder(); 
+        }
+
         function navigateTo(id, name) {
-            // Find index if navigating backwards via breadcrumb
             const index = pathHistory.findIndex(p => p.id === id);
             if (index !== -1) {
                 pathHistory = pathHistory.slice(0, index + 1);
@@ -288,15 +306,12 @@
             breadcrumbContainer.innerHTML = '';
             pathHistory.forEach((crumb, index) => {
                 const isLast = index === pathHistory.length - 1;
-                
                 const span = document.createElement('span');
                 span.className = `flex items-center ${isLast ? 'text-white font-bold' : 'text-gray-400 hover:text-blue-400 cursor-pointer transition-colors'}`;
                 
                 let icon = index === 0 ? '<i class="fa-brands fa-google-drive mr-2"></i>' : '';
                 span.innerHTML = `${icon}${crumb.name}`;
-                
                 if(!isLast) span.onclick = () => navigateTo(crumb.id, crumb.name);
-                
                 breadcrumbContainer.appendChild(span);
                 
                 if (!isLast) {
@@ -312,54 +327,70 @@
             renderBreadcrumbs();
             showLoading();
             
+            const activeSort = getSortPreference();
+            if (document.getElementById('sortMenu')) document.getElementById('sortMenu').value = activeSort;
+            if (document.getElementById('sortMenuMobile')) document.getElementById('sortMenuMobile').value = activeSort;
+
             if (isConnected) {
-                await fetchDriveItems(currentFolder.id);
+                await fetchDriveItems(currentFolder.id, activeSort);
             } else {
-                // Demo Mode
                 setTimeout(() => {
                     renderItems(demoFileSystem[currentFolder.id] || []);
                 }, 500);
             }
         }
 
-        async function fetchDriveItems(folderId) {
+        async function fetchDriveItems(folderId, activeSort) {
             try {
-                // Query: Folders OR Images inside the current folder
+                // 한 번에 1000개까지 가져와서 재정렬 가능하도록 적용
                 const response = await gapi.client.drive.files.list({
-                    pageSize: 100,
+                    pageSize: 1000,
                     fields: 'files(id, name, mimeType, thumbnailLink)',
                     q: `'${folderId}' in parents and trashed = false and (mimeType contains 'image/' or mimeType = 'application/vnd.google-apps.folder')`,
-                    orderBy: 'folder, name' // Folders first, then alphabetically
+                    orderBy: activeSort 
                 });
 
                 const rawFiles = response.result.files || [];
-                const formattedItems = rawFiles.map(f => {
+                let formattedItems = rawFiles.map(f => {
                     const isFolder = f.mimeType === 'application/vnd.google-apps.folder';
                     return {
                         id: f.id,
                         name: f.name,
                         type: isFolder ? 'folder' : 'image',
-                        // High-res URL for lightbox, medium-res for thumb
                         fullUrl: f.thumbnailLink ? f.thumbnailLink.replace(/=s\d+$/, '=s0') : null,
                         thumbUrl: f.thumbnailLink ? f.thumbnailLink.replace(/=s\d+$/, '=w500') : null
                     };
                 });
+
+                // 숫자 인식 '자연 정렬' 로직
+                if (activeSort.includes('name')) {
+                    const isDesc = activeSort.includes('desc');
+                    formattedItems.sort((a, b) => {
+                        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+                        const compareResult = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+                        return isDesc ? -compareResult : compareResult;
+                    });
+                }
                 
                 await renderItems(formattedItems);
                 
-                // Asynchronously fetch covers for folders that don't have them
                 formattedItems.filter(i => i.type === 'folder').forEach(folder => {
                     fetchFolderCoverAsync(folder.id);
                 });
 
             } catch (err) {
                 console.error(err);
-                alert("Error fetching Drive data.");
+                // 1시간이 지나 토큰이 만료되어 401 에러가 발생한 경우 자동 로그아웃 처리
+                if (err && err.status === 401) {
+                    handleSignoutClick();
+                    alert("인증이 만료되었습니다. 안전을 위해 다시 Connect를 눌러주세요.");
+                } else {
+                    alert("Error fetching Drive data.");
+                }
                 hideLoading();
             }
         }
 
-        // Fetches 1 image from inside a folder to use as its cover thumbnail
         async function fetchFolderCoverAsync(folderId) {
             if(!isConnected) return;
             try {
@@ -376,13 +407,11 @@
                         imgEl.classList.remove('opacity-0');
                     }
                 }
-            } catch(e) { /* Ignore errors for thumbnail fetching */ }
+            } catch(e) {}
         }
 
-        // --- STREAMING_CHUNK:Rendering UI Items (Folders/Images) ---
         function renderItems(items) {
             galleryGrid.innerHTML = '';
-            
             if (!items || items.length === 0) {
                 showEmpty();
                 return;
@@ -393,19 +422,13 @@
                 card.className = 'gallery-item relative rounded-2xl overflow-hidden cursor-pointer group bg-gray-800 border border-gray-700 shadow-md';
                 
                 if (item.type === 'folder') {
-                    // Render Folder Card
                     const coverUrl = isConnected ? '' : (item.cover || '');
-                    
                     card.innerHTML = `
-                        <!-- Placeholder background if no cover -->
                         <div class="absolute inset-0 bg-gray-700 flex items-center justify-center">
                             <i class="fa-solid fa-folder text-4xl text-gray-500"></i>
                         </div>
-                        <!-- Cover Image -->
                         <img id="cover-${item.id}" src="${coverUrl}" class="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${coverUrl ? '' : 'opacity-0'}" loading="lazy">
-                        <!-- Gradient Overlay -->
                         <div class="absolute inset-0 folder-icon-overlay"></div>
-                        <!-- Folder Label -->
                         <div class="absolute bottom-0 left-0 right-0 p-3 flex items-center">
                             <i class="fa-solid fa-folder text-blue-400 mr-2 drop-shadow-md"></i>
                             <span class="text-white font-medium truncate drop-shadow-md text-sm md:text-base">${item.name}</span>
@@ -413,21 +436,16 @@
                     `;
                     card.onclick = () => navigateTo(item.id, item.name);
                 } else {
-                    // Render Image Card
                     const thumbUrl = item.thumbUrl || item.url;
                     const fullUrl = item.fullUrl || item.url;
-                    card.innerHTML = `
-                        <img src="${thumbUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" alt="${item.name}">
-                    `;
+                    card.innerHTML = `<img src="${thumbUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" alt="${item.name}">`;
                     card.onclick = () => openLightbox(fullUrl, item.name);
                 }
-                
                 galleryGrid.appendChild(card);
             });
             hideLoading();
         }
 
-        // --- STREAMING_CHUNK:UI Helpers and Modals ---
         function showLoading() {
             loadingSpinner.style.display = 'flex';
             galleryGrid.style.display = 'none';
@@ -436,7 +454,7 @@
 
         function hideLoading() {
             loadingSpinner.style.display = 'none';
-            galleryGrid.style.display = 'grid'; // changed to grid
+            galleryGrid.style.display = 'grid'; 
         }
 
         function showEmpty() {
@@ -445,7 +463,6 @@
             emptyState.style.display = 'flex';
         }
 
-        // Settings Modal
         const settingsModal = document.getElementById('settings-modal');
         const settingsContent = document.getElementById('settings-content');
         
@@ -474,7 +491,6 @@
             setTimeout(() => window.location.reload(), 300); 
         }
 
-        // Lightbox
         const lightbox = document.getElementById('lightbox');
         const lightboxImg = document.getElementById('lightbox-img');
         const lightboxCaption = document.getElementById('lightbox-caption');
@@ -505,8 +521,8 @@
             if(e.key === 'Escape' && !lightbox.classList.contains('hidden')) closeLightbox();
         });
 
+        // 스마트폰 앱 설치(PWA) 지원 기능
         function initPWA() {
-            // 1. App Manifest 주입 (스마트폰에 앱으로 설치하기 위한 설정)
             const manifest = {
                 name: "Drive Gallery",
                 short_name: "Gallery",
@@ -514,13 +530,11 @@
                 background_color: "#111827",
                 theme_color: "#1f2937",
                 icons: [{
-                    src: "https://cdn-icons-png.flaticon.com/512/2916/2916118.png", // 기본 갤러리 아이콘
+                    src: "https://cdn-icons-png.flaticon.com/512/2916/2916118.png", 
                     sizes: "512x512",
                     type: "image/png"
                 }]
             };
-            
-            // JSON 형태의 매니페스트를 가상 파일로 만들어 HTML에 주입
             const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
             const manifestUrl = URL.createObjectURL(manifestBlob);
             const link = document.createElement('link');
@@ -528,78 +542,48 @@
             link.href = manifestUrl;
             document.head.appendChild(link);
 
-            // 2. Service Worker 주입 (앱 껍데기와 썸네일 이미지 로컬 기기 캐싱)
             if ('serviceWorker' in navigator) {
                 const swCode = `
                     const CACHE_NAME = 'drive-gallery-v2';
-                    
                     self.addEventListener('install', event => {
-                        event.waitUntil(
-                            caches.open(CACHE_NAME).then(cache => {
-                                // 앱이 처음 켜질 때 현재 HTML 파일 자체를 스마트폰에 저장합니다.
-                                return cache.addAll([
-                                    location.href, // 현재 HTML
-                                    'https://cdn.tailwindcss.com',
-                                    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
-                                ]);
-                            })
-                        );
+                        event.waitUntil(caches.open(CACHE_NAME).then(cache => {
+                            return cache.addAll([ location.href, 'https://cdn.tailwindcss.com', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css' ]);
+                        }));
                         self.skipWaiting();
                     });
-
-                    self.addEventListener('activate', event => {
-                        event.waitUntil(clients.claim());
-                    });
-
+                    self.addEventListener('activate', event => { event.waitUntil(clients.claim()); });
                     self.addEventListener('fetch', event => {
                         const url = new URL(event.request.url);
-                        
-                        // 구글 드라이브 썸네일, 데모 이미지, HTML, CSS 등 모든 요청 가로채기
                         event.respondWith(
                             caches.match(event.request).then(cachedResponse => {
-                                // 캐시된 파일이 있으면 즉시 반환 (호스팅 서버가 죽어도 여기서 파일이 나옴)
                                 if (cachedResponse) {
-                                    // 뒤에서 몰래 최신 버전이 있는지 확인하고 업데이트 (Stale-while-revalidate)
                                     fetch(event.request).then(networkResponse => {
-                                        caches.open(CACHE_NAME).then(cache => {
-                                            cache.put(event.request, networkResponse.clone());
-                                        });
-                                    }).catch(() => { /* 오프라인 상태 무시 */ });
+                                        caches.open(CACHE_NAME).then(cache => { cache.put(event.request, networkResponse.clone()); });
+                                    }).catch(() => {});
                                     return cachedResponse;
                                 }
-                                
-                                // 캐시에 없으면 인터넷에서 가져오고 캐시에 저장
                                 return fetch(event.request).then(networkResponse => {
-                                    // 구글 API 스크립트는 캐싱에서 제외 (보안 및 최신화)
                                     if(!url.hostname.includes('apis.google.com') && !url.hostname.includes('accounts.google.com')) {
                                         const responseToCache = networkResponse.clone();
-                                        caches.open(CACHE_NAME).then(cache => {
-                                            cache.put(event.request, responseToCache);
-                                        });
+                                        caches.open(CACHE_NAME).then(cache => { cache.put(event.request, responseToCache); });
                                     }
                                     return networkResponse;
-                                }).catch(() => {
-                                    // 인터넷도 끊기고 서버도 죽었을 때의 처리 (빈 화면 방지)
-                                    console.log("Offline mode");
-                                });
+                                }).catch(() => { console.log("Offline mode"); });
                             })
                         );
                     });
                 `;
                 const swBlob = new Blob([swCode], { type: 'application/javascript' });
                 const swUrl = URL.createObjectURL(swBlob);
-                navigator.serviceWorker.register(swUrl).then(reg => {
-                    console.log('Thumbnail Caching enabled. Images will load instantly next time.');
-                }).catch(err => console.error('SW registration failed:', err));
+                navigator.serviceWorker.register(swUrl).catch(err => console.error(err));
             }
         }
 
-        // Start
         window.addEventListener('DOMContentLoaded', () => {
             initPWA();
             initApp();
         });
-
     </script>
 </body>
+</html>
 </html>
