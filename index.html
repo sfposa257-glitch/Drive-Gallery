@@ -213,16 +213,21 @@
         function gapiLoadPromise() { return new Promise((r) => { if (typeof gapi !== 'undefined') r(); else window.onload = r; }); }
         function gisLoadPromise() { return new Promise((r) => { if (typeof google !== 'undefined' && google.accounts) r(); else setTimeout(r, 500); }); }
 
-        async function gapiInit() {
-            try {
-                await gapi.client.init({
-                    apiKey: localStorage.getItem('drive_api_key'),
-                    discoveryDocs: [DISCOVERY_DOC],
-                });
-                gapiInited = true;
-                maybeEnableButtons();
-            } catch (err) { alert('API Init Error. Check API Key.'); }
+        function gapiInit() {
+    gapi.load('client', async () => {
+        try {
+            await gapi.client.init({
+                apiKey: localStorage.getItem('drive_api_key'),
+                discoveryDocs: [DISCOVERY_DOC],
+            });
+            gapiInited = true;
+            maybeEnableButtons();
+        } catch (err) { 
+            console.error("API Init Error:", err);
+            alert('API Init Error. Check API Key.'); 
         }
+    });
+}
 
         function gisInit() {
             tokenClient = google.accounts.oauth2.initTokenClient({
