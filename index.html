@@ -478,13 +478,18 @@
             }
         }
 
-        async function fetchFolderCoverAsync(folderId) {
+        async function fetchFolderCoverAsync(folderId, sortOrder = 'createdTime desc') {
             if(!isConnected) return;
             try {
+                // 🔽 [추가됨] 폴더 최우선 정렬 규칙(folder,)을 제거하고 순수 사진 정렬 기준만 추출
+                let imageSortOrder = sortOrder.replace('folder,', '').trim();
+                if (!imageSortOrder) imageSortOrder = 'createdTime desc';
+
                 const res = await gapi.client.drive.files.list({
                     pageSize: 1,
                     fields: 'files(thumbnailLink)',
-                    q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`
+                    q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
+                    orderBy: imageSortOrder // 🔽 [수정됨] 표지 1장을 가져올 때도 정렬 방식을 강제합니다.
                 });
                 if (res.result.files && res.result.files.length > 0) {
                     const coverUrl = res.result.files[0].thumbnailLink.replace(/=s\d+$/, '=w500');
@@ -672,5 +677,4 @@
         });
     </script>
 </body>
-</html>
 </html>
