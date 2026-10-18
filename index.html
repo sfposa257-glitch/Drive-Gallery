@@ -2,15 +2,14 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drive Gallery - Folders</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Drive Gallery</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google API Scripts -->
     <script async defer src="https://apis.google.com/js/api.js"></script>
     <script async defer src="https://accounts.google.com/gsi/client"></script>
     <style>
-        /* Custom scrollbar and animations */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #1f2937; }
         ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
@@ -39,6 +38,13 @@
 
         .folder-icon-overlay {
             background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%);
+        }
+
+        /* Viewer smooth transition */
+        .viewer-img {
+            transition: opacity 0.15s ease-in-out;
+            user-select: none;
+            -webkit-user-drag: none;
         }
     </style>
 </head>
@@ -71,7 +77,7 @@
                     Disconnect
                 </button>
                 
-                <button onclick="toggleSettingsModal()" class="text-gray-400 hover:text-white p-2 transition-colors rounded-full hover:bg-gray-800">
+                <button onclick="toggleSettingsModal()" class="text-gray-400 hover:text-white p-2 transition-colors rounded-full hover:bg-gray-800" title="API 설정">
                     <i class="fa-solid fa-gear text-lg"></i>
                 </button>
             </div>
@@ -80,7 +86,14 @@
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto p-4 py-6">
-        <div id="breadcrumb-container" class="flex items-center space-x-2 text-sm md:text-base text-gray-300 mb-6 overflow-x-auto whitespace-nowrap pb-2 font-medium"></div>
+        <!-- 경로(Breadcrumb) 및 현재 적용된 정렬 상태 배지 -->
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-6 pb-2 border-b border-gray-800/80">
+            <div id="breadcrumb-container" class="flex items-center space-x-2 text-sm md:text-base text-gray-300 overflow-x-auto whitespace-nowrap font-medium"></div>
+            <button id="active-sort-badge" onclick="toggleSortModal()" class="inline-flex items-center space-x-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-full border border-gray-700 transition-colors shrink-0">
+                <i class="fa-solid fa-arrow-down-wide-short text-blue-400"></i>
+                <span id="active-sort-badge-text">최신순 · 기본값</span>
+            </button>
+        </div>
 
         <div id="loading-spinner" class="hidden flex flex-col items-center justify-center py-20">
             <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
@@ -98,14 +111,62 @@
         <div id="gallery-grid" class="app-grid"></div>
     </main>
 
-    <!-- Lightbox Modal -->
-    <div id="lightbox" class="fixed inset-0 z-50 hidden bg-black/95 flex items-center justify-center opacity-0 transition-opacity duration-300">
-        <button onclick="closeLightbox()" class="absolute top-6 right-6 text-white/50 hover:text-white text-4xl p-2 z-50 transition-colors">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-        <div class="relative w-full h-full flex items-center justify-center p-2 md:p-12">
-            <img id="lightbox-img" src="" alt="Full view" class="max-w-full max-h-full object-contain rounded-md shadow-2xl">
-            <div id="lightbox-caption" class="absolute bottom-8 left-0 right-0 text-center text-white bg-black/50 backdrop-blur-sm p-3 font-medium mx-auto max-w-fit rounded-full text-sm md:text-base"></div>
+    <!-- Lightbox Modal (1장/2장 보기 및 터치/슬라이드 넘기기 지원) -->
+    <div id="lightbox" class="fixed inset-0 z-50 hidden bg-black/95 flex flex-col justify-between opacity-0 transition-opacity duration-300">
+        
+        <!-- Lightbox 상단 컨트롤 바 -->
+        <div class="w-full p-4 flex justify-between items-center z-50 bg-gradient-to-b from-black/80 to-transparent" onclick="event.stopPropagation()">
+            <!-- 페이지 카운터 -->
+            <div id="lightbox-counter" class="text-white/90 text-xs md:text-sm font-semibold bg-gray-800/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-gray-700">
+                1 / 1
+            </div>
+
+            <!-- 우측 컨트롤 (터치 방식 전환, 1장/2장 보기 전환 & 닫기) -->
+            <div class="flex items-center space-x-2 md:space-x-3">
+                <button id="touch-mode-btn" onclick="toggleTouchMode(event)" class="flex items-center space-x-1.5 bg-gray-800/90 hover:bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs md:text-sm font-medium border border-gray-600 transition-colors shadow-lg" title="터치 넘기기 방식 변경">
+                    <i id="touch-mode-icon" class="fa-solid fa-arrows-left-right text-amber-400"></i>
+                    <span id="touch-mode-text">좌/우 터치</span>
+                </button>
+
+                <button id="view-mode-btn" onclick="toggleViewMode(event)" class="flex items-center space-x-1.5 bg-gray-800/90 hover:bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs md:text-sm font-medium border border-gray-600 transition-colors shadow-lg" title="1장/2장 보기 전환">
+                    <i id="view-mode-icon" class="fa-regular fa-square"></i>
+                    <span id="view-mode-text">1장 보기</span>
+                </button>
+
+                <button onclick="closeLightbox(event)" class="text-white/70 hover:text-white bg-gray-800/80 hover:bg-gray-700 w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-colors border border-gray-700">
+                    <i class="fa-solid fa-xmark text-lg md:text-xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Lightbox 메인 이미지 영역 (터치/클릭/스와이프 감지) -->
+        <div id="lightbox-stage" class="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden px-2 md:px-14 cursor-pointer">
+            
+            <!-- 이전 버튼 (좌측 화살표) -->
+            <button id="prev-btn" onclick="prevImage(event)" class="absolute left-2 md:left-6 z-40 text-white/60 hover:text-white bg-black/40 hover:bg-black/80 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all backdrop-blur-sm border border-white/10">
+                <i class="fa-solid fa-chevron-left text-lg md:text-xl"></i>
+            </button>
+
+            <!-- 이미지 컨테이너 (1장 또는 2장 표시) -->
+            <div id="lightbox-img-container" class="w-full h-full flex items-center justify-center gap-2 md:gap-4 max-h-[82vh]">
+                <img id="lightbox-img-1" src="" alt="View 1" class="viewer-img max-w-full max-h-full object-contain rounded shadow-2xl">
+                <img id="lightbox-img-2" src="" alt="View 2" class="viewer-img hidden max-w-[49%] max-h-full object-contain rounded shadow-2xl">
+            </div>
+
+            <!-- 다음 버튼 (우측 화살표) -->
+            <button id="next-btn" onclick="nextImage(event)" class="absolute right-2 md:right-6 z-40 text-white/60 hover:text-white bg-black/40 hover:bg-black/80 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all backdrop-blur-sm border border-white/10">
+                <i class="fa-solid fa-chevron-right text-lg md:text-xl"></i>
+            </button>
+
+            <!-- 안내 토스트 메시지 -->
+            <div id="viewer-toast" class="pointer-events-none fixed top-20 left-1/2 transform -translate-x-1/2 bg-blue-600/90 text-white px-4 py-2 rounded-full text-sm font-medium shadow-xl opacity-0 transition-opacity duration-200 z-50">
+                알림
+            </div>
+        </div>
+
+        <!-- Lightbox 하단 캡션 바 -->
+        <div class="w-full p-4 flex flex-col items-center justify-center z-50 bg-gradient-to-t from-black/80 to-transparent" onclick="event.stopPropagation()">
+            <div id="lightbox-caption" class="text-center text-white bg-black/60 backdrop-blur-sm px-4 py-1.5 font-medium rounded-full text-xs md:text-sm max-w-[90vw] truncate border border-white/10"></div>
         </div>
     </div>
 
@@ -142,25 +203,47 @@
                 <button onclick="toggleSortModal()" class="text-gray-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="p-6 space-y-5">
+                <!-- 현재 폴더 및 하위 폴더 적용 상태 안내 박스 -->
+                <div class="bg-gray-900/80 border border-gray-700 rounded-xl p-3.5 text-xs space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">현재 위치:</span>
+                        <span id="sort-modal-folder-name" class="text-white font-semibold truncate max-w-[200px]">My Drive</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">현재 폴더 정렬:</span>
+                        <span id="sort-modal-current-rule" class="text-blue-400 font-medium">기본값 (최신순)</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400">하위 폴더(썸네일/내부) 정렬:</span>
+                        <span id="sort-modal-sub-rule" class="text-emerald-400 font-medium">기본값 (최신순)</span>
+                    </div>
+                    <div class="flex justify-between items-center pt-1 border-t border-gray-800">
+                        <span class="text-gray-500">전체 폴더 기본값:</span>
+                        <span id="sort-modal-global-rule" class="text-gray-400">최신순</span>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-1.5">정렬 방식</label>
                     <select id="sort-value-input" class="w-full bg-gray-900 border border-gray-600 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
-                        <option value="folder, createdTime desc">⬇️ 최신순 (새로운 사진 먼저)</option>
-                        <option value="folder, createdTime">⬆️ 과거순 (오래된 사진 먼저)</option>
-                        <option value="folder, name">🔤 이름순 (A-Z)</option>
+                        <option value="folder, createdTime desc">⬇️ 최신순 (새로운 항목 먼저)</option>
+                        <option value="folder, createdTime">⬆️ 과거순 (오래된 항목 먼저)</option>
+                        <option value="folder, name">🔤 이름순 (1, 2, 3 / A-Z)</option>
                         <option value="folder, name desc">🔤 이름 역순 (Z-A)</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-300 mb-1.5">적용 범위 설정</label>
                     <select id="sort-scope-input" class="w-full bg-gray-900 border border-gray-600 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
-                        <option value="global">🌐 전체 폴더 기본값으로 적용</option>
-                        <option value="this_only">📁 현재 폴더에만 임시 적용</option>
-                        <option value="this_and_sub">📂 현재 폴더 및 하위 폴더 전체 적용</option>
+                        <option value="this_only">📁 현재 폴더만 적용 (하위 폴더 설정은 유지)</option>
+                        <option value="this_and_sub">📂 현재 폴더 + 하위 폴더까지 모두 적용</option>
+                        <option value="sub_only">📑 하위 폴더들만 적용 (현재 폴더는 유지)</option>
+                        <option value="global">🌐 전체 폴더 기본값으로 변경</option>
                     </select>
                 </div>
-                <div class="flex justify-between items-center mt-2">
-                    <button onclick="clearCurrentFolderSort()" class="text-sm text-red-400 hover:text-red-300 transition-colors underline decoration-red-400/50 underline-offset-4">현재 폴더의 개별 설정 초기화</button>
+                <div class="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-gray-700/60">
+                    <button onclick="clearCurrentFolderSort()" class="text-xs text-amber-400 hover:text-amber-300 transition-colors underline decoration-amber-400/50 underline-offset-4">현재 폴더 설정 해제</button>
+                    <button onclick="resetAllSortSettings()" class="text-xs text-red-400 hover:text-red-300 transition-colors underline decoration-red-400/50 underline-offset-4">모든 정렬 설정 전체 초기화</button>
                 </div>
             </div>
             <div class="p-5 border-t border-gray-700 bg-gray-900 flex justify-end space-x-3">
@@ -181,6 +264,12 @@
         
         let pathHistory = [{ id: 'root', name: 'My Drive' }];
         
+        // --- 뷰어(Lightbox) 관련 상태 변수 ---
+        let currentImageList = [];
+        let currentImageIndex = 0;
+        let viewMode = localStorage.getItem('gallery_view_mode') || 'single';
+        let touchMode = localStorage.getItem('gallery_touch_mode') || 'zone';
+        
         const authBtn = document.getElementById('auth-btn');
         const logoutBtn = document.getElementById('logout-btn');
         const galleryGrid = document.getElementById('gallery-grid');
@@ -190,15 +279,87 @@
         const breadcrumbContainer = document.getElementById('breadcrumb-container');
 
         const demoFileSystem = {
-            'root': [{ id: 'img_1', type: 'image', name: 'Please Connect Drive', url: 'https://images.unsplash.com/photo-1516109923616-d3ce38be8610?w=800&q=80' }]
+            'root': [
+                { id: 'f_sample', type: 'folder', name: '01_샘플 앨범 A', createdTime: '2025-01-01T10:00:00Z', cover: 'https://images.unsplash.com/photo-1506905925232-39f1559ad9e1?w=500&q=80' },
+                { id: 'f_sample2', type: 'folder', name: '02_샘플 앨범 B (최신)', createdTime: '2025-06-01T10:00:00Z', cover: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=500&q=80' },
+                { id: 'img_1', type: 'image', name: '01_Mountain_View.jpg', createdTime: '2025-01-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1506905925232-39f1559ad9e1?w=1200&q=80' },
+                { id: 'img_2', type: 'image', name: '02_Forest_Path.jpg', createdTime: '2025-02-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&q=80' },
+                { id: 'img_3', type: 'image', name: '03_Ocean_Waves.jpg', createdTime: '2025-03-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1200&q=80' },
+                { id: 'img_4', type: 'image', name: '04_Starry_Night.jpg', createdTime: '2025-04-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1200&q=80' }
+            ],
+            'f_sample': [
+                { id: 'img_s1', type: 'image', name: 'Page_01.jpg', createdTime: '2025-04-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=1200&q=80' },
+                { id: 'img_s2', type: 'image', name: 'Page_02.jpg', createdTime: '2025-03-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=1200&q=80' },
+                { id: 'img_s3', type: 'image', name: 'Page_03.jpg', createdTime: '2025-02-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1200&q=80' },
+                { id: 'img_s4', type: 'image', name: 'Page_04.jpg', createdTime: '2025-01-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=1200&q=80' }
+            ],
+            'f_sample2': [
+                { id: 'img_b1', type: 'image', name: '01_First.jpg', createdTime: '2025-01-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1200&q=80' },
+                { id: 'img_b2', type: 'image', name: '02_Latest.jpg', createdTime: '2025-05-01T10:00:00Z', url: 'https://images.unsplash.com/photo-1506905925232-39f1559ad9e1?w=1200&q=80' }
+            ]
         };
 
+        // 정렬 코드 이름을 읽기 쉬운 한글로 변환
+        function getSortLabel(sortValue) {
+            switch (sortValue) {
+                case 'folder, createdTime desc': return '최신순';
+                case 'folder, createdTime': return '과거순';
+                case 'folder, name': return '이름순';
+                case 'folder, name desc': return '이름 역순';
+                default: return '최신순';
+            }
+        }
+
+        // 이전 버전의 데이터를 새로운 { selfValue, subValue } 분리형 구조로 마이그레이션 및 정리
+        function sanitizeSortPrefs() {
+            try {
+                const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
+                let modified = false;
+                for (const key in prefs) {
+                    const item = prefs[key];
+                    if (typeof item !== 'object' || item === null) {
+                        delete prefs[key];
+                        modified = true;
+                        continue;
+                    }
+                    if ('value' in item || 'scope' in item) {
+                        const newEntry = {};
+                        if (item.scope === 'this_only' && item.value) {
+                            newEntry.selfValue = item.value;
+                        } else if (item.scope === 'this_and_sub' && item.value) {
+                            newEntry.selfValue = item.value;
+                            newEntry.subValue = item.value;
+                        }
+                        if (Object.keys(newEntry).length > 0) {
+                            prefs[key] = newEntry;
+                        } else {
+                            delete prefs[key];
+                        }
+                        modified = true;
+                    } else if (!item.selfValue && !item.subValue) {
+                        delete prefs[key];
+                        modified = true;
+                    }
+                }
+                if (modified) {
+                    localStorage.setItem('folder_sort_prefs', JSON.stringify(prefs));
+                }
+            } catch (e) {
+                localStorage.removeItem('folder_sort_prefs');
+            }
+        }
+
         function initApp() {
+            sanitizeSortPrefs();
+
             const apiKey = localStorage.getItem('drive_api_key');
             const clientId = localStorage.getItem('drive_client_id');
 
             if(apiKey) document.getElementById('api-key-input').value = apiKey;
             if(clientId) document.getElementById('client-id-input').value = clientId;
+
+            updateViewModeUI();
+            updateTouchModeUI();
 
             if (apiKey && clientId) {
                 statusIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span> API Ready';
@@ -228,6 +389,7 @@
                     });
                     gapiInited = true;
 
+                    // 🔽 새로고침 및 재로그인 시에도 localStorage에서 로그인 토큰 복구
                     const savedToken = localStorage.getItem('gapi_token');
                     if (savedToken) {
                         gapi.client.setToken(JSON.parse(savedToken));
@@ -261,6 +423,7 @@
         function handleAuthClick() {
             tokenClient.callback = async (resp) => {
                 if (resp.error) throw (resp);
+                // 🔽 로그인 토큰을 localStorage에 안전하게 영구 저장 (로그아웃해도 유실되지 않음)
                 localStorage.setItem('gapi_token', JSON.stringify(gapi.client.getToken()));
 
                 authBtn.style.display = 'none';
@@ -270,8 +433,7 @@
                 pathHistory = [{ id: 'root', name: 'My Drive' }];
                 loadCurrentFolder();
             };
-            if (gapi.client.getToken() === null) tokenClient.requestAccessToken({prompt: 'consent'});
-            else tokenClient.requestAccessToken({prompt: ''});
+            tokenClient.requestAccessToken({prompt: ''});
         }
 
         function handleSignoutClick() {
@@ -290,27 +452,73 @@
             }
         }
 
-        function getSortPreference() {
+        function getSortInfo(targetPath = pathHistory) {
+            const globalSort = localStorage.getItem('global_sort') || 'folder, createdTime desc';
             try {
-                const currentFolderId = pathHistory[pathHistory.length - 1].id;
+                const targetFolder = targetPath[targetPath.length - 1];
+                const targetFolderId = targetFolder.id;
                 const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
                 
-                if (prefs[currentFolderId]) return prefs[currentFolderId].value;
-                
-                for (let i = pathHistory.length - 2; i >= 0; i--) {
-                    const fid = pathHistory[i].id;
-                    if (prefs[fid] && prefs[fid].scope === 'this_and_sub') return prefs[fid].value;
+                if (prefs[targetFolderId] && prefs[targetFolderId].selfValue) {
+                    return {
+                        value: prefs[targetFolderId].selfValue,
+                        sourceType: 'self',
+                        sourceName: targetFolder.name
+                    };
                 }
                 
-                const globalSort = localStorage.getItem('global_sort');
-                if (globalSort) return globalSort;
+                for (let i = targetPath.length - 2; i >= 0; i--) {
+                    const ancestor = targetPath[i];
+                    const pref = prefs[ancestor.id];
+                    if (pref && pref.subValue) {
+                        return {
+                            value: pref.subValue,
+                            sourceType: 'inherited',
+                            sourceName: ancestor.name
+                        };
+                    }
+                }
             } catch (e) { console.error(e); }
-            return 'folder, createdTime desc'; 
+
+            return {
+                value: globalSort,
+                sourceType: 'global',
+                sourceName: '전체 기본값'
+            };
         }
 
-        // 🔽 즐겨찾기(고정) 토글 및 상태 관리 함수 🔽
+        function getSubfoldersInheritedInfo(targetPath = pathHistory) {
+            const dummyChildPath = [...targetPath, { id: '__child_preview__', name: '하위 폴더' }];
+            return getSortInfo(dummyChildPath);
+        }
+
+        function getSortPreference(targetPath = pathHistory) {
+            return getSortInfo(targetPath).value;
+        }
+
+        function updateSortBadgeUI() {
+            const selfInfo = getSortInfo(pathHistory);
+            const subInfo = getSubfoldersInheritedInfo(pathHistory);
+            const selfLabel = getSortLabel(selfInfo.value);
+            const subLabel = getSortLabel(subInfo.value);
+            const badgeText = document.getElementById('active-sort-badge-text');
+            if (!badgeText) return;
+
+            if (selfInfo.value !== subInfo.value) {
+                badgeText.textContent = `현재: ${selfLabel} · 하위: ${subLabel}`;
+            } else if (selfInfo.sourceType === 'self' && subInfo.sourceType === 'inherited' && subInfo.sourceName === pathHistory[pathHistory.length - 1].name) {
+                badgeText.textContent = `${selfLabel} · 하위 폴더 포함`;
+            } else if (selfInfo.sourceType === 'self') {
+                badgeText.textContent = `${selfLabel} · 현재 폴더`;
+            } else if (selfInfo.sourceType === 'inherited') {
+                badgeText.textContent = `${selfLabel} · 상위(${selfInfo.sourceName}) 상속`;
+            } else {
+                badgeText.textContent = `${selfLabel} · 기본값`;
+            }
+        }
+
         function togglePin(event, id) {
-            event.stopPropagation(); // 카드 클릭(폴더 열기/라이트박스) 방지
+            event.stopPropagation();
             try {
                 let pinned = JSON.parse(localStorage.getItem('pinned_items') || '[]');
                 if (pinned.includes(id)) {
@@ -319,7 +527,7 @@
                     pinned.push(id);
                 }
                 localStorage.setItem('pinned_items', JSON.stringify(pinned));
-                loadCurrentFolder(); // 목록 새로고침
+                loadCurrentFolder();
             } catch (e) { console.error(e); }
         }
 
@@ -328,16 +536,31 @@
 
         function toggleSortModal() {
             if (sortModal.classList.contains('hidden')) {
-                const currentFolderId = pathHistory[pathHistory.length - 1].id;
-                const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
-                
-                if (prefs[currentFolderId]) {
-                    document.getElementById('sort-value-input').value = prefs[currentFolderId].value;
-                    document.getElementById('sort-scope-input').value = prefs[currentFolderId].scope;
+                const currentFolder = pathHistory[pathHistory.length - 1];
+                const selfInfo = getSortInfo(pathHistory);
+                const subInfo = getSubfoldersInheritedInfo(pathHistory);
+                const globalSort = localStorage.getItem('global_sort') || 'folder, createdTime desc';
+
+                document.getElementById('sort-modal-folder-name').textContent = currentFolder.name;
+                document.getElementById('sort-modal-global-rule').textContent = getSortLabel(globalSort);
+
+                if (selfInfo.sourceType === 'self') {
+                    document.getElementById('sort-modal-current-rule').textContent = `${getSortLabel(selfInfo.value)} (개별 지정됨)`;
+                } else if (selfInfo.sourceType === 'inherited') {
+                    document.getElementById('sort-modal-current-rule').textContent = `${getSortLabel(selfInfo.value)} ('${selfInfo.sourceName}' 상속)`;
                 } else {
-                    document.getElementById('sort-value-input').value = getSortPreference();
-                    document.getElementById('sort-scope-input').value = 'global';
+                    document.getElementById('sort-modal-current-rule').textContent = `${getSortLabel(selfInfo.value)} (기본값)`;
                 }
+
+                if (subInfo.sourceType === 'inherited') {
+                    const fromWhere = (subInfo.sourceName === currentFolder.name) ? '현재 폴더에서 지정됨' : `'${subInfo.sourceName}' 상속`;
+                    document.getElementById('sort-modal-sub-rule').textContent = `${getSortLabel(subInfo.value)} (${fromWhere})`;
+                } else {
+                    document.getElementById('sort-modal-sub-rule').textContent = `${getSortLabel(subInfo.value)} (기본값)`;
+                }
+
+                document.getElementById('sort-value-input').value = selfInfo.value;
+                document.getElementById('sort-scope-input').value = 'this_only';
 
                 sortModal.classList.remove('hidden');
                 void sortModal.offsetWidth;
@@ -354,20 +577,31 @@
             const value = document.getElementById('sort-value-input').value;
             const scope = document.getElementById('sort-scope-input').value;
             const currentFolderId = pathHistory[pathHistory.length - 1].id;
+            const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
+
+            if (!prefs[currentFolderId]) {
+                prefs[currentFolderId] = {};
+            }
 
             if (scope === 'global') {
                 localStorage.setItem('global_sort', value);
-                const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
                 delete prefs[currentFolderId];
-                localStorage.setItem('folder_sort_prefs', JSON.stringify(prefs));
-            } else {
-                const prefs = JSON.parse(localStorage.getItem('folder_sort_prefs') || '{}');
-                prefs[currentFolderId] = { value: value, scope: scope };
-                localStorage.setItem('folder_sort_prefs', JSON.stringify(prefs));
+            } else if (scope === 'this_only') {
+                prefs[currentFolderId].selfValue = value;
+            } else if (scope === 'this_and_sub') {
+                prefs[currentFolderId].selfValue = value;
+                prefs[currentFolderId].subValue = value;
+            } else if (scope === 'sub_only') {
+                prefs[currentFolderId].subValue = value;
             }
 
+            if (prefs[currentFolderId] && Object.keys(prefs[currentFolderId]).length === 0) {
+                delete prefs[currentFolderId];
+            }
+
+            localStorage.setItem('folder_sort_prefs', JSON.stringify(prefs));
             toggleSortModal();
-            if (isConnected) loadCurrentFolder(); 
+            loadCurrentFolder(); 
         }
 
         function clearCurrentFolderSort() {
@@ -378,9 +612,18 @@
                 delete prefs[currentFolderId];
                 localStorage.setItem('folder_sort_prefs', JSON.stringify(prefs));
                 toggleSortModal();
-                if (isConnected) loadCurrentFolder();
+                loadCurrentFolder();
             } else {
-                alert("이 폴더에는 지정된 개별 정렬 설정이 없습니다.");
+                alert("현재 폴더에 직접 지정된 정렬 설정이 없습니다.");
+            }
+        }
+
+        function resetAllSortSettings() {
+            if (confirm("모든 폴더의 개별 정렬 설정을 지우고 전체 기본값을 '최신순'으로 초기화할까요?")) {
+                localStorage.removeItem('folder_sort_prefs');
+                localStorage.removeItem('global_sort');
+                toggleSortModal();
+                loadCurrentFolder();
             }
         }
 
@@ -412,6 +655,29 @@
                     breadcrumbContainer.appendChild(separator);
                 }
             });
+            updateSortBadgeUI();
+        }
+
+        function sortItemsArray(items, sortOrder) {
+            const list = [...items];
+            const isDesc = sortOrder.includes('desc');
+
+            if (sortOrder.includes('name')) {
+                list.sort((a, b) => {
+                    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+                    const compareResult = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+                    return isDesc ? -compareResult : compareResult;
+                });
+            } else if (sortOrder.includes('createdTime')) {
+                list.sort((a, b) => {
+                    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+                    if (!a.createdTime || !b.createdTime) return 0;
+                    const timeA = new Date(a.createdTime).getTime();
+                    const timeB = new Date(b.createdTime).getTime();
+                    return isDesc ? (timeB - timeA) : (timeA - timeB);
+                });
+            }
+            return list;
         }
 
         async function loadCurrentFolder() {
@@ -419,25 +685,23 @@
             renderBreadcrumbs();
             showLoading();
             
-            const activeSort = getSortPreference();
+            const activeSort = getSortPreference(pathHistory);
 
             if (isConnected) {
                 await fetchDriveItems(currentFolder.id, activeSort);
             } else {
                 setTimeout(() => {
-                    renderItems(demoFileSystem[currentFolder.id] || []);
-                }, 500);
+                    const demoItems = demoFileSystem[currentFolder.id] || [];
+                    renderItems(sortItemsArray(demoItems, activeSort));
+                }, 300);
             }
         }
 
         async function fetchDriveItems(folderId, activeSort) {
             try {
-                let imageSortOrder = activeSort.replace('folder,', '').trim();
-                if (!imageSortOrder) imageSortOrder = 'createdTime desc';
-
                 const response = await gapi.client.drive.files.list({
                     pageSize: 1000,
-                    fields: 'files(id, name, mimeType, thumbnailLink)',
+                    fields: 'files(id, name, mimeType, thumbnailLink, createdTime)',
                     q: `'${folderId}' in parents and trashed = false and (mimeType contains 'image/' or mimeType = 'application/vnd.google-apps.folder')`,
                     orderBy: activeSort 
                 });
@@ -448,43 +712,42 @@
                     return {
                         id: f.id,
                         name: f.name,
+                        createdTime: f.createdTime,
                         type: isFolder ? 'folder' : 'image',
                         fullUrl: f.thumbnailLink ? f.thumbnailLink.replace(/=s\d+$/, '=s0') : null,
                         thumbUrl: f.thumbnailLink ? f.thumbnailLink.replace(/=s\d+$/, '=w500') : null
                     };
                 });
 
-                // 이름순 정렬 시 숫자 자연 정렬 적용
-                if (activeSort.includes('name')) {
-                    const isDesc = activeSort.includes('desc');
-                    formattedItems.sort((a, b) => {
-                        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-                        const compareResult = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-                        return isDesc ? -compareResult : compareResult;
-                    });
-                }
+                formattedItems = sortItemsArray(formattedItems, activeSort);
 
-                // 🔽 [핵심] 고정(즐겨찾기)된 항목을 무조건 맨 위로 강제 정렬 🔽
                 const pinnedIds = JSON.parse(localStorage.getItem('pinned_items') || '[]');
                 formattedItems.sort((a, b) => {
                     const aPinned = pinnedIds.includes(a.id);
                     const bPinned = pinnedIds.includes(b.id);
-                    if (aPinned && !bPinned) return -1; // a가 고정되어 있으면 위로
-                    if (!aPinned && bPinned) return 1;  // b가 고정되어 있으면 위로
-                    return 0; // 둘 다 상태가 같으면 기존 정렬 유지
+                    if (aPinned && !bPinned) return -1;
+                    if (!aPinned && bPinned) return 1;
+                    return 0;
                 });
                 
-                await renderItems(formattedItems, imageSortOrder);
+                renderItems(formattedItems);
                 
                 formattedItems.filter(i => i.type === 'folder').forEach(folder => {
-                    fetchFolderCoverAsync(folder.id, imageSortOrder);
+                    const childPath = [...pathHistory, { id: folder.id, name: folder.name }];
+                    const childEffectiveSort = getSortPreference(childPath);
+                    fetchFolderCoverAsync(folder.id, childEffectiveSort);
                 });
 
             } catch (err) {
                 console.error(err);
                 if (err && err.status === 401) {
-                    handleSignoutClick();
-                    alert("인증이 만료되었습니다. 다시 Connect를 눌러주세요.");
+                    gapi.client.setToken('');
+                    localStorage.removeItem('gapi_token');
+                    isConnected = false;
+                    authBtn.style.display = 'inline-flex';
+                    logoutBtn.style.display = 'none';
+                    statusIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span> API Ready';
+                    alert("인증이 만료되었습니다. 상단의 Connect 버튼을 눌러 다시 연결해 주세요.");
                 } else {
                     alert("Error fetching Drive data.");
                 }
@@ -492,21 +755,37 @@
             }
         }
 
-        async function fetchFolderCoverAsync(folderId, imageSortOrder = 'createdTime desc') {
+        async function fetchFolderCoverAsync(folderId, childSortOrder = 'folder, createdTime desc') {
             if(!isConnected) return;
             try {
+                let imageSortOrder = childSortOrder.replace('folder,', '').trim();
+                if (!imageSortOrder) imageSortOrder = 'createdTime desc';
+
+                const isNameSort = imageSortOrder.includes('name');
                 const res = await gapi.client.drive.files.list({
-                    pageSize: 1,
-                    fields: 'files(thumbnailLink)',
+                    pageSize: isNameSort ? 500 : 1,
+                    fields: 'files(name, thumbnailLink)',
                     q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
                     orderBy: imageSortOrder
                 });
+
                 if (res.result.files && res.result.files.length > 0) {
-                    const coverUrl = res.result.files[0].thumbnailLink.replace(/=s\d+$/, '=w500');
-                    const imgEl = document.getElementById(`cover-${folderId}`);
-                    if(imgEl) {
-                        imgEl.src = coverUrl;
-                        imgEl.classList.remove('opacity-0');
+                    let files = res.result.files;
+                    if (isNameSort) {
+                        const isDesc = imageSortOrder.includes('desc');
+                        files.sort((a, b) => {
+                            const cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+                            return isDesc ? -cmp : cmp;
+                        });
+                    }
+                    const firstFile = files[0];
+                    if (firstFile && firstFile.thumbnailLink) {
+                        const coverUrl = firstFile.thumbnailLink.replace(/=s\d+$/, '=w500');
+                        const imgEl = document.getElementById(`cover-${folderId}`);
+                        if(imgEl) {
+                            imgEl.src = coverUrl;
+                            imgEl.classList.remove('opacity-0');
+                        }
                     }
                 }
             } catch(e) {}
@@ -515,10 +794,13 @@
         function renderItems(items) {
             galleryGrid.innerHTML = '';
             if (!items || items.length === 0) {
+                currentImageList = [];
                 showEmpty();
                 return;
             }
             
+            currentImageList = items.filter(item => item.type === 'image');
+
             const pinnedIds = JSON.parse(localStorage.getItem('pinned_items') || '[]');
 
             items.forEach(item => {
@@ -526,7 +808,6 @@
                 const card = document.createElement('div');
                 card.className = 'gallery-item relative rounded-2xl overflow-hidden cursor-pointer group bg-gray-800 border border-gray-700 shadow-md';
                 
-                // 고정(즐겨찾기) 버튼 HTML (우측 상단 별모양)
                 const pinButtonHtml = `
                     <button onclick="togglePin(event, '${item.id}')" class="absolute top-2 right-2 z-20 p-2 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-sm text-white transition-all ${isPinned ? 'text-yellow-400 opacity-100' : 'opacity-0 group-hover:opacity-100'}">
                         <i class="fa-${isPinned ? 'solid' : 'regular'} fa-star text-sm drop-shadow"></i>
@@ -550,12 +831,12 @@
                     card.onclick = () => navigateTo(item.id, item.name);
                 } else {
                     const thumbUrl = item.thumbUrl || item.url;
-                    const fullUrl = item.fullUrl || item.url;
+                    const imageIndex = currentImageList.findIndex(img => img.id === item.id);
                     card.innerHTML = `
                         ${pinButtonHtml}
                         <img src="${thumbUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" alt="${item.name}">
                     `;
-                    card.onclick = () => openLightbox(fullUrl, item.name);
+                    card.onclick = () => openLightboxByIndex(imageIndex);
                 }
                 galleryGrid.appendChild(card);
             });
@@ -607,34 +888,248 @@
             setTimeout(() => window.location.reload(), 300); 
         }
 
+        // ==========================================
+        // 🖼️ Lightbox (1장/2장 보기 및 터치/슬라이드 뷰어)
+        // ==========================================
         const lightbox = document.getElementById('lightbox');
-        const lightboxImg = document.getElementById('lightbox-img');
+        const lightboxStage = document.getElementById('lightbox-stage');
+        const lightboxImg1 = document.getElementById('lightbox-img-1');
+        const lightboxImg2 = document.getElementById('lightbox-img-2');
         const lightboxCaption = document.getElementById('lightbox-caption');
+        const lightboxCounter = document.getElementById('lightbox-counter');
+        const viewModeIcon = document.getElementById('view-mode-icon');
+        const viewModeText = document.getElementById('view-mode-text');
+        const touchModeIcon = document.getElementById('touch-mode-icon');
+        const touchModeText = document.getElementById('touch-mode-text');
+        const viewerToast = document.getElementById('viewer-toast');
+        let toastTimeout;
 
-        function openLightbox(url, title) {
-            lightboxImg.src = url;
-            lightboxCaption.textContent = title;
+        function showViewerToast(msg) {
+            viewerToast.textContent = msg;
+            viewerToast.classList.remove('opacity-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                viewerToast.classList.add('opacity-0');
+            }, 1200);
+        }
+
+        function updateViewModeUI() {
+            if (viewMode === 'double') {
+                viewModeIcon.className = 'fa-solid fa-book-open text-blue-400';
+                viewModeText.textContent = '2장씩 보기';
+            } else {
+                viewModeIcon.className = 'fa-regular fa-square text-emerald-400';
+                viewModeText.textContent = '1장 보기';
+            }
+        }
+
+        function toggleViewMode(event) {
+            if (event) event.stopPropagation();
+            viewMode = (viewMode === 'single') ? 'double' : 'single';
+            localStorage.setItem('gallery_view_mode', viewMode);
+            updateViewModeUI();
+            updateLightboxContent();
+            showViewerToast(viewMode === 'double' ? '📖 2장씩 보기 모드' : '🖼️ 1장 보기 모드');
+        }
+
+        function updateTouchModeUI() {
+            if (touchMode === 'next') {
+                touchModeIcon.className = 'fa-solid fa-hand-pointer text-purple-400';
+                touchModeText.textContent = '전체 터치(다음)';
+            } else {
+                touchModeIcon.className = 'fa-solid fa-arrows-left-right text-amber-400';
+                touchModeText.textContent = '좌/우 터치';
+            }
+        }
+
+        function toggleTouchMode(event) {
+            if (event) event.stopPropagation();
+            touchMode = (touchMode === 'zone') ? 'next' : 'zone';
+            localStorage.setItem('gallery_touch_mode', touchMode);
+            updateTouchModeUI();
+            showViewerToast(touchMode === 'next' ? '👆 어디든 터치 시 다음 사진으로 이동' : '↔️ 좌/우 구역별 터치 이동 모드');
+        }
+
+        function openLightboxByIndex(index) {
+            if (!currentImageList || currentImageList.length === 0) return;
+            currentImageIndex = Math.max(0, Math.min(index, currentImageList.length - 1));
+            updateLightboxContent();
+            
             lightbox.classList.remove('hidden');
             void lightbox.offsetWidth;
             lightbox.classList.remove('opacity-0');
             document.body.style.overflow = 'hidden';
         }
 
-        function closeLightbox() {
+        function updateLightboxContent() {
+            if (!currentImageList || currentImageList.length === 0) return;
+
+            const item1 = currentImageList[currentImageIndex];
+            const url1 = item1.fullUrl || item1.url;
+
+            if (viewMode === 'double') {
+                const item2 = (currentImageIndex + 1 < currentImageList.length) ? currentImageList[currentImageIndex + 1] : null;
+                
+                lightboxImg1.src = url1;
+                lightboxImg1.alt = item1.name;
+
+                if (item2) {
+                    const url2 = item2.fullUrl || item2.url;
+                    lightboxImg1.className = 'viewer-img max-w-[49%] max-h-full object-contain rounded shadow-2xl';
+                    lightboxImg2.src = url2;
+                    lightboxImg2.alt = item2.name;
+                    lightboxImg2.className = 'viewer-img max-w-[49%] max-h-full object-contain rounded shadow-2xl';
+                    
+                    lightboxCaption.textContent = `${item1.name}  |  ${item2.name}`;
+                    lightboxCounter.textContent = `${currentImageIndex + 1}-${currentImageIndex + 2} / ${currentImageList.length}`;
+                } else {
+                    lightboxImg1.className = 'viewer-img max-w-full max-h-full object-contain rounded shadow-2xl';
+                    lightboxImg2.className = 'viewer-img hidden';
+                    lightboxImg2.src = '';
+                    
+                    lightboxCaption.textContent = item1.name;
+                    lightboxCounter.textContent = `${currentImageIndex + 1} / ${currentImageList.length}`;
+                }
+            } else {
+                lightboxImg1.src = url1;
+                lightboxImg1.alt = item1.name;
+                lightboxImg1.className = 'viewer-img max-w-full max-h-full object-contain rounded shadow-2xl';
+                
+                lightboxImg2.className = 'viewer-img hidden';
+                lightboxImg2.src = '';
+
+                lightboxCaption.textContent = item1.name;
+                lightboxCounter.textContent = `${currentImageIndex + 1} / ${currentImageList.length}`;
+            }
+
+            document.getElementById('prev-btn').style.opacity = (currentImageIndex <= 0) ? '0.2' : '1';
+            const step = (viewMode === 'double') ? 2 : 1;
+            document.getElementById('next-btn').style.opacity = (currentImageIndex + step >= currentImageList.length) ? '0.2' : '1';
+
+            preloadAdjacentImages();
+        }
+
+        function preloadAdjacentImages() {
+            const preloadIndices = [currentImageIndex + 1, currentImageIndex + 2, currentImageIndex - 1];
+            preloadIndices.forEach(idx => {
+                if (idx >= 0 && idx < currentImageList.length) {
+                    const preloadImg = new Image();
+                    preloadImg.src = currentImageList[idx].fullUrl || currentImageList[idx].url;
+                }
+            });
+        }
+
+        function nextImage(event) {
+            if (event) event.stopPropagation();
+            if (!currentImageList || currentImageList.length === 0) return;
+
+            const step = (viewMode === 'double') ? 2 : 1;
+            if (currentImageIndex + step < currentImageList.length) {
+                currentImageIndex += step;
+                updateLightboxContent();
+            } else {
+                showViewerToast('마지막 사진입니다');
+            }
+        }
+
+        function prevImage(event) {
+            if (event) event.stopPropagation();
+            if (!currentImageList || currentImageList.length === 0) return;
+
+            const step = (viewMode === 'double') ? 2 : 1;
+            if (currentImageIndex > 0) {
+                currentImageIndex = Math.max(0, currentImageIndex - step);
+                updateLightboxContent();
+            } else {
+                showViewerToast('첫 번째 사진입니다');
+            }
+        }
+
+        function closeLightbox(event) {
+            if (event) event.stopPropagation();
             lightbox.classList.add('opacity-0');
             setTimeout(() => {
                 lightbox.classList.add('hidden');
-                lightboxImg.src = '';
+                lightboxImg1.src = '';
+                lightboxImg2.src = '';
                 document.body.style.overflow = 'auto';
             }, 300);
         }
 
-        lightbox.addEventListener('click', (e) => {
-            if(e.target === lightbox || e.target.classList.contains('relative')) closeLightbox();
+        // --- 터치 슬라이드(Swipe) 및 화면 클릭 넘기기 이벤트 ---
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isSwiping = false;
+
+        lightboxStage.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                isSwiping = false;
+            }
+        }, { passive: true });
+
+        lightboxStage.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                const dx = Math.abs(e.touches[0].clientX - touchStartX);
+                const dy = Math.abs(e.touches[0].clientY - touchStartY);
+                if (dx > 15 || dy > 15) {
+                    isSwiping = true;
+                }
+            }
+        }, { passive: true });
+
+        lightboxStage.addEventListener('touchend', (e) => {
+            if (e.changedTouches.length === 1) {
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+
+                if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                    if (deltaX < 0) {
+                        nextImage();
+                    } else {
+                        prevImage();
+                    }
+                }
+            }
+        }, { passive: true });
+
+        lightboxStage.addEventListener('click', (e) => {
+            if (isSwiping) {
+                isSwiping = false;
+                return;
+            }
+            if (e.target.closest('button')) return;
+
+            if (touchMode === 'next') {
+                nextImage();
+                return;
+            }
+
+            const screenWidth = window.innerWidth;
+            const clickX = e.clientX;
+
+            if (clickX < screenWidth * 0.35) {
+                prevImage();
+            } else {
+                nextImage();
+            }
         });
         
         document.addEventListener('keydown', (e) => {
-            if(e.key === 'Escape' && !lightbox.classList.contains('hidden')) closeLightbox();
+            if (lightbox.classList.contains('hidden')) return;
+            
+            if (e.key === 'Escape') closeLightbox();
+            else if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextImage();
+            }
+            else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevImage();
+            }
         });
 
         function initPWA() {
@@ -659,7 +1154,7 @@
 
             if ('serviceWorker' in navigator) {
                 const swCode = `
-                    const CACHE_NAME = 'drive-gallery-v2';
+                    const CACHE_NAME = 'drive-gallery-v6';
                     self.addEventListener('install', event => {
                         event.waitUntil(caches.open(CACHE_NAME).then(cache => {
                             return cache.addAll([ location.href, 'https://cdn.tailwindcss.com', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css' ]);
@@ -669,6 +1164,7 @@
                     self.addEventListener('activate', event => { event.waitUntil(clients.claim()); });
                     self.addEventListener('fetch', event => {
                         const url = new URL(event.request.url);
+                        event.respondwww?.catch(() => {});
                         event.respondWith(
                             caches.match(event.request).then(cachedResponse => {
                                 if (cachedResponse) {
@@ -701,4 +1197,5 @@
     </script>
 </body>
 </html>
+
 </html>
